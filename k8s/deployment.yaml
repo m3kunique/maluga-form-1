@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maluga-form-service
+  labels:
+    app: maluga-form-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: maluga-form-service
+  template:
+    metadata:
+      labels:
+        app: maluga-form-service
+    spec:
+      containers:
+        # Web server for receiving webhooks
+        - name: web
+          image: test-maluga-form-web:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DB_PATH
+              value: "/app/data/db.sqlite3"
+            - name: ALLOWED_HOSTS
+              value: "test-maluga-api.m3k.su,localhost,127.0.0.1"
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-bot-token
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-chat-id
+            - name: TELEGRAM_ADMIN_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-admin-chat-id
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /healthz/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz/
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # Background worker for Google Sheets queue and Telegram admin bot
+        - name: worker
+          image: test-maluga-form-web:latest
+          imagePullPolicy: Never
+          command: ["python", "manage.py", "run_all"]
+          env:
+            - name: DB_PATH
+              value: "/app/data/db.sqlite3"
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-bot-token
+            - name: TELEGRAM_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-chat-id
+            - name: TELEGRAM_ADMIN_CHAT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: maluga-secrets
+                  key: telegram-admin-chat-id
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: maluga-forms-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maluga-form-service
+spec:
+  selector:
+    app: maluga-form-service
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-w+uwm)qyq3b6m#ll((u^abdu!kx3b7-$ys_y9l%hdd6101bva9'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-w+uwm)qyq3b6m#ll((u^abdu!kx3b7-$ys_y9l%hdd6101bva9')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = ['test-maluga-api.m3k.su', '127.0.0.1', 'localhost']
+extra_hosts = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()]
+ALLOWED_HOSTS = list(set(['test-maluga-api.m3k.su', '127.0.0.1', 'localhost'] + extra_hosts))
 
 
 # Application definition
@@ -73,10 +75,16 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+DB_PATH = Path(os.getenv('DB_PATH', str(BASE_DIR / 'db.sqlite3')))
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': DB_PATH,
+        'OPTIONS': {
+            'timeout': 20,
+        },
     }
 }
 
@@ -126,3 +134,13 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# Webhook & Google Sheets configuration
+SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '1X0koco9C3PieSI_L3cuaIxjxkSEhISVrN6DULoEBsfA')
+CREDENTIALS_FILE = os.getenv('CREDENTIALS_FILE', str(BASE_DIR / 'google_credentials.json'))
+EXPECTED_TOKEN = os.getenv('EXPECTED_TOKEN', '0kYQ3XoDfJvV0XrlXxzL2XI3Vt8urysb')
+
+# Telegram alerts & admin bot configuration
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
+TELEGRAM_ADMIN_CHAT_ID = os.getenv('TELEGRAM_ADMIN_CHAT_ID', TELEGRAM_CHAT_ID)
