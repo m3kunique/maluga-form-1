@@ -104,8 +104,8 @@ spec:
 
         # AmneziaWG sidecar tunnel for routing Telegram traffic
         - name: awg-client
-          image: ghcr.io/zeozeozeo/amneziawg-client:latest
-          imagePullPolicy: IfNotPresent
+          image: amneziawg-client-v2:latest
+          imagePullPolicy: Never
           securityContext:
             capabilities:
               add:
