@@ -27,8 +27,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE("Stopping worker gracefully..."))
             running = False
 
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        try:
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+        except ValueError:
+            pass
 
         consecutive_errors = 0
         while running:
