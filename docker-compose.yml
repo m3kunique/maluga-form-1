@@ -1,0 +1,9 @@
+services:
+  web:
+    build: .
+    container_name: django_yandex_webhook
+    restart: unless-stopped    # Автоматический запуск после перезагрузки сервера или падения
+    ports:
+      - "127.0.0.1:8000:8000"  # Пробрасываем порт только на localhost (для Nginx)
+    environment:
+      - PYTHONUNBUFFERED=1

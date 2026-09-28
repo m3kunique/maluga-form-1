@@ -1,0 +1,7 @@
+google_credentials.json
+venv/
+.env
+db.sqlite3
+__pycache__/
+*.pyc
+*.tar
