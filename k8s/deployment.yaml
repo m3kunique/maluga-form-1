@@ -16,6 +16,10 @@ spec:
       labels:
         app: maluga-form-service
     spec:
+      dnsConfig:
+        nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
       containers:
         # Web server for receiving webhooks
         - name: web
