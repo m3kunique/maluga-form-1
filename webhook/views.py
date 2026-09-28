@@ -108,7 +108,8 @@ def dynamic_webhook(request, form_slug: str):
             )
             is_new_form = True
 
-        if form.auto_init and not form.columns_order:
+        has_corrupt_cols = form and any(isinstance(c, dict) for c in (form.columns_order or []))
+        if form.auto_init and (not form.columns_order or has_corrupt_cols):
             detected_columns = extract_schema_from_payload(data)
             if detected_columns:
                 form.columns_order = detected_columns

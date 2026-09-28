@@ -18,6 +18,32 @@ def clean_val(val):
     return VALUE_MAPPING.get(val_str.lower(), val_str)
 
 
+def extract_field_label(field_val, fallback_key: str) -> str:
+    """Extract a clean human-readable string column name from field_val."""
+    if isinstance(field_val, dict):
+        # 1. Direct string label/name
+        for prop in ('name', 'label', 'question'):
+            v = field_val.get(prop)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+            if isinstance(v, dict):
+                label = v.get('ru') or v.get('en') or v.get('name') or v.get('label') or v.get('slug')
+                if isinstance(label, str) and label.strip():
+                    return label.strip()
+
+        # 2. Check question metadata if separate
+        q = field_val.get('question')
+        if isinstance(q, dict):
+            q_label = q.get('name') or q.get('label') or q.get('slug')
+            if isinstance(q_label, str) and q_label.strip():
+                return q_label.strip()
+
+        if field_val.get('slug') and isinstance(field_val.get('slug'), str):
+            return field_val.get('slug').strip()
+
+    return str(fallback_key)
+
+
 def extract_schema_from_payload(payload: dict) -> list[str]:
     """Extract list of question/column names from incoming payload."""
     if not isinstance(payload, dict):
@@ -28,13 +54,8 @@ def extract_schema_from_payload(payload: dict) -> list[str]:
         data_block = payload['answer'].get('data', {})
         columns = ["submission_id", "created_at"]
         for key, field_val in data_block.items():
-            # In Yandex Forms, field_val can have a 'name' or 'label' or 'slug'
-            col_name = None
-            if isinstance(field_val, dict):
-                col_name = field_val.get('name') or field_val.get('label') or field_val.get('question')
-            if not col_name:
-                col_name = str(key)
-            columns.append(col_name)
+            col_name = extract_field_label(field_val, str(key))
+            columns.append(str(col_name))
         return columns
 
     # 2. Flat dictionary format
@@ -43,10 +64,17 @@ def extract_schema_from_payload(payload: dict) -> list[str]:
     return columns
 
 
-def parse_payload_to_row(payload: dict, columns_order: list[str]) -> list[str]:
+def parse_payload_to_row(payload: dict, columns_order: list) -> list[str]:
     """Given a payload and columns_order, produce the exact list of string cell values."""
     if not columns_order:
         return []
+
+    cleaned_columns = []
+    for col in columns_order:
+        if isinstance(col, dict):
+            cleaned_columns.append(extract_field_label(col, "field"))
+        else:
+            cleaned_columns.append(str(col))
 
     # If nested Yandex Forms
     if 'answer' in payload and isinstance(payload['answer'], dict):
@@ -54,7 +82,6 @@ def parse_payload_to_row(payload: dict, columns_order: list[str]) -> list[str]:
         created_at = str(payload.get('created', ''))
         data_block = payload.get('answer', {}).get('data', {})
 
-        # Build mapping of field_key and field_name to cleaned string value
         value_by_key = {}
         value_by_name = {}
         for key, field_val in data_block.items():
@@ -66,15 +93,14 @@ def parse_payload_to_row(payload: dict, columns_order: list[str]) -> list[str]:
                 else:
                     cleaned = clean_val(val)
 
-                name = field_val.get('name') or field_val.get('label')
-                if name:
-                    value_by_name[str(name)] = cleaned
+                name = extract_field_label(field_val, str(key))
+                value_by_name[name] = cleaned
             else:
                 cleaned = clean_val(field_val)
             value_by_key[str(key)] = cleaned
 
         row = []
-        for col in columns_order:
+        for col in cleaned_columns:
             if col == "submission_id":
                 row.append(sub_id)
             elif col == "created_at":
@@ -88,5 +114,6 @@ def parse_payload_to_row(payload: dict, columns_order: list[str]) -> list[str]:
         return row
 
     # Flat dictionary payload
-    row = [clean_val(payload.get(col, "")) for col in columns_order]
+    row = [clean_val(payload.get(col, "")) for col in cleaned_columns]
     return row
+
