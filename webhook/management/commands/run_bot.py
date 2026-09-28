@@ -13,6 +13,8 @@ from core.telegram import (
     answer_callback_query,
     get_telegram_config,
     get_admin_chat_ids,
+    get_bot_info,
+    delete_telegram_webhook,
 )
 
 # Persistent bottom reply keyboard
@@ -174,8 +176,23 @@ class Command(BaseCommand):
         admin_ids = get_admin_chat_ids()
         masked_token = f"{token[:6]}...{token[-4:]}" if len(token) > 10 else "***"
         self.stdout.write(self.style.SUCCESS(
-            f"Telegram bot started! Listening for updates (token={masked_token}, admins={', '.join(admin_ids) or 'any'})"
+            f"Telegram bot starting... (token={masked_token}, admins={', '.join(admin_ids) or 'any'})"
         ))
+        sys.stdout.flush()
+
+        # Remove any existing webhook so long-polling works immediately
+        delete_telegram_webhook()
+
+        # Display bot user info
+        bot_info = get_bot_info()
+        if bot_info:
+            bot_username = bot_info.get('username', 'unknown')
+            bot_name = bot_info.get('first_name', '')
+            self.stdout.write(self.style.SUCCESS(
+                f"Connected to Telegram as @{bot_username} ({bot_name}, ID: {bot_info.get('id')})"
+            ))
+        else:
+            self.stdout.write(self.style.WARNING("Could not fetch getMe info from Telegram."))
         sys.stdout.flush()
 
         offset = None

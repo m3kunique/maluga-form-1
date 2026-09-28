@@ -195,16 +195,39 @@ def send_telegram_alert(source: str, error: Exception | str, details: dict | Non
     return send_telegram_message(message)
 
 
-def delete_telegram_webhook() -> bool:
+def get_bot_info() -> dict | None:
+    """Fetch info about the current bot user via getMe."""
+    token, _, _ = get_telegram_config()
+    if not token or token == 'dummy':
+        return None
+    url = f"https://api.telegram.org/bot{token}/getMe"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'FormSyncBot/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data.get('ok'):
+                return data.get('result')
+            print(f"Telegram getMe failed: {data}", flush=True)
+    except Exception as e:
+        print(f"Error fetching bot info: {e}", flush=True)
+    return None
+
+
+def delete_telegram_webhook(drop_pending_updates: bool = False) -> bool:
     """Delete any active Telegram webhook so that getUpdates polling works."""
     token, _, _ = get_telegram_config()
     if not token or token == 'dummy':
         return False
-    url = f"https://api.telegram.org/bot{token}/deleteWebhook"
+    drop_param = "?drop_pending_updates=true" if drop_pending_updates else ""
+    url = f"https://api.telegram.org/bot{token}/deleteWebhook{drop_param}"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'FormSyncBot/1.0'})
         with urllib.request.urlopen(req, timeout=10) as response:
-            return response.status == 200
+            res_data = json.loads(response.read().decode('utf-8'))
+            ok = res_data.get('ok', False)
+            if ok:
+                print("Successfully removed Telegram webhook for long-polling.", flush=True)
+            return ok
     except Exception as e:
         print(f"deleteWebhook error: {e}", flush=True)
         return False
@@ -223,15 +246,17 @@ def get_telegram_updates(offset: int | None = None, timeout: int = 25) -> list[d
     req = urllib.request.Request(url, headers={'User-Agent': 'FormSyncBot/1.0'})
     try:
         with urllib.request.urlopen(req, timeout=timeout + 10) as response:
-            if response.status == 200:
-                data = json.loads(response.read().decode('utf-8'))
-                if data.get('ok'):
-                    return data.get('result', [])
-    except Exception as e:
-        err_str = str(e).lower()
-        if '409' in err_str or 'conflict' in err_str:
-            print("Telegram webhook conflict detected. Deleting webhook...", flush=True)
+            data = json.loads(response.read().decode('utf-8'))
+            if data.get('ok'):
+                return data.get('result', [])
+            print(f"Telegram getUpdates response not ok: {data}", flush=True)
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='ignore')
+        print(f"Telegram HTTP {e.code} error: {err_body}", flush=True)
+        if e.code == 409:
+            print("Webhook is active on Telegram servers. Deleting webhook...", flush=True)
             delete_telegram_webhook()
-        elif 'timed out' not in err_str:
+    except Exception as e:
+        if 'timed out' not in str(e).lower():
             print(f"Error fetching Telegram updates: {e}", flush=True)
     return []
