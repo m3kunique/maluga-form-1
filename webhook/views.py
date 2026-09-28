@@ -118,7 +118,10 @@ def dynamic_webhook(request, form_slug: str):
                         [
                             {"text": "➕ Создать Google Таблицу", "callback_data": f"create_prompt:{form_slug}"},
                             {"text": "🔗 Привязать существующую", "callback_data": f"bind_prompt:{form_slug}"},
-                        ]
+                        ],
+                        [
+                            {"text": f"📐 Настроить колонки ({len(detected_columns)})", "callback_data": f"cols:{form_slug}"},
+                        ],
                     ]
                 }
                 send_telegram_message(prompt_msg, reply_markup=buttons)

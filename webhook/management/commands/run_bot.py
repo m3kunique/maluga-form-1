@@ -71,10 +71,11 @@ def build_forms_view() -> tuple[str, dict]:
         )
 
         row_buttons = [
-            {"text": f"📜 Логи: {f.slug}", "callback_data": f"logs:{f.slug}"},
+            {"text": "📜 Логи", "callback_data": f"logs:{f.slug}"},
+            {"text": f"📐 Колонки ({len(f.columns_order)})", "callback_data": f"cols:{f.slug}"},
         ]
         if counts['failed'] > 0:
-            row_buttons.append({"text": f"🔄 Повторить ({counts['failed']})", "callback_data": f"retry:{f.slug}"})
+            row_buttons.append({"text": f"🔄 ({counts['failed']})", "callback_data": f"retry:{f.slug}"})
 
         toggle_text = "⏸ Отключить" if f.is_active else "▶️ Включить"
         row_buttons.append({"text": toggle_text, "callback_data": f"toggle:{f.slug}"})
@@ -146,6 +147,41 @@ def build_logs_view(slug: str) -> tuple[str, dict]:
         ]
     }
     return text, kb
+
+
+def build_columns_view(slug: str) -> tuple[str, dict]:
+    """Build message and inline keyboard showing current column ordering for a form."""
+    form = FormConfig.objects.filter(slug=slug).first()
+    if not form:
+        return f"❌ Форма <code>{slug}</code> не найдена.", {"inline_keyboard": [[{"text": "🔙 К формам", "callback_data": "back_to_forms"}]]}
+
+    cols = form.columns_order
+    if not cols:
+        text = (
+            f"📐 <b>Колонки формы «{slug}»</b>\n\n"
+            f"Колонки еще не определены. Они определятся автоматически при поступлении первого вебхука."
+        )
+        kb = {"inline_keyboard": [[{"text": "🔙 К формам", "callback_data": "back_to_forms"}]]}
+        return text, kb
+
+    lines = [
+        f"📐 <b>Порядок колонок для формы «{slug}» ({len(cols)} шт.):</b>\n",
+        "Текущая расстановка в Google Таблице:",
+    ]
+    for idx, col in enumerate(cols, 1):
+        lines.append(f"<b>{idx}.</b> <code>{col}</code>")
+
+    lines.append("\n<b>Как изменить порядок:</b>")
+    lines.append("Отправьте в чат номера колонок в нужном порядке через запятую или пробел.")
+    lines.append("<i>Например: 2, 3, 6, 7, 4, 1, 8, 9, 10, 11, 5, 12, 13</i>\n")
+    lines.append("<i>Колонки, чьи номера вы не укажете, автоматически переместятся в конец.</i>")
+
+    kb = {
+        "inline_keyboard": [
+            [{"text": "❌ Отмена", "callback_data": "cancel_action"}]
+        ]
+    }
+    return "\n".join(lines), kb
 
 
 def build_help_view() -> str:
@@ -319,6 +355,14 @@ class Command(BaseCommand):
             send_telegram_message(prompt, chat_id=chat_id, reply_markup=cancel_kb)
             return
 
+        if data.startswith("cols:"):
+            slug = data.split(":", 1)[1]
+            USER_STATES[chat_id] = {"action": "await_columns_order", "slug": slug}
+            answer_callback_query(cb_id)
+            text_cols, kb_cols = build_columns_view(slug)
+            send_telegram_message(text_cols, chat_id=chat_id, reply_markup=kb_cols)
+            return
+
         if data == "cancel_action":
             if chat_id in USER_STATES:
                 del USER_STATES[chat_id]
@@ -427,6 +471,91 @@ class Command(BaseCommand):
                     f"• Отложенных записей выгружено: {res['processed']}"
                 )
                 send_telegram_message(result_msg, chat_id=chat_id, reply_markup=MAIN_MENU_KEYBOARD)
+                return
+
+            if action == "await_columns_order":
+                slug = state.get("slug")
+                form = FormConfig.objects.filter(slug=slug).first()
+                if not form or not form.columns_order:
+                    del USER_STATES[chat_id]
+                    send_telegram_message("❌ Ошибка: форма или колонки не найдены.", chat_id=chat_id, reply_markup=MAIN_MENU_KEYBOARD)
+                    return
+
+                current_cols = list(form.columns_order)
+                raw_input = text.strip()
+
+                import re
+                parts = [p.strip() for p in re.split(r'[,;\s]+', raw_input) if p.strip()]
+
+                new_order = []
+                used_indices = set()
+
+                is_numeric = all(p.isdigit() for p in parts)
+                if is_numeric and parts:
+                    for p in parts:
+                        idx = int(p) - 1
+                        if 0 <= idx < len(current_cols) and idx not in used_indices:
+                            new_order.append(current_cols[idx])
+                            used_indices.add(idx)
+
+                    # Append unmentioned columns to the end
+                    for idx, col in enumerate(current_cols):
+                        if idx not in used_indices:
+                            new_order.append(col)
+                else:
+                    # Match by line or comma-separated names
+                    raw_lines = [l.strip() for l in raw_input.split('\n') if l.strip()]
+                    if len(raw_lines) == 1:
+                        raw_lines = [l.strip() for l in raw_input.split(',') if l.strip()]
+
+                    for name in raw_lines:
+                        cleaned = re.sub(r'^\d+[\.\)\s]+', '', name).strip().lower()
+                        for idx, col in enumerate(current_cols):
+                            if idx not in used_indices and (cleaned == col.lower()):
+                                new_order.append(col)
+                                used_indices.add(idx)
+                                break
+
+                    for idx, col in enumerate(current_cols):
+                        if idx not in used_indices:
+                            new_order.append(col)
+
+                if not new_order or len(new_order) != len(current_cols) or not used_indices:
+                    send_telegram_message(
+                        "⚠️ Не удалось распознать порядок колонок. Пожалуйста, укажите номера колонок через запятую, например:\n<code>1, 2, 4, 3, 5</code>\nИли напишите «Отмена».",
+                        chat_id=chat_id,
+                    )
+                    return
+
+                form.columns_order = new_order
+                form.save(update_fields=['columns_order'])
+
+                # Re-parse pending submissions with the updated column order
+                from webhook.services.discovery import parse_payload_to_row
+                pending_subs = WebhookSubmission.objects.filter(form_slug=slug, status='PENDING')
+                for sub in pending_subs:
+                    if sub.raw_payload:
+                        sub.parsed_row = parse_payload_to_row(sub.raw_payload, new_order)
+                        sub.save(update_fields=['parsed_row'])
+
+                sheet_updated_msg = ""
+                if form.spreadsheet_id:
+                    ok = google_sheets.update_headers(form.spreadsheet_id, form.sheet_name, new_order)
+                    if ok:
+                        sheet_updated_msg = "\n\n📊 <b>Заголовки в привязанной Google Таблице также обновлены!</b>"
+
+                del USER_STATES[chat_id]
+
+                res_lines = [
+                    f"✅ <b>Порядок колонок для формы «{slug}» сохранен!</b>\n",
+                    "Новая расстановка колонок:",
+                ]
+                for idx, col in enumerate(new_order, 1):
+                    res_lines.append(f"<b>{idx}.</b> <code>{col}</code>")
+                if sheet_updated_msg:
+                    res_lines.append(sheet_updated_msg)
+
+                send_telegram_message("\n".join(res_lines), chat_id=chat_id, reply_markup=MAIN_MENU_KEYBOARD)
                 return
 
         # Main menu actions (both button text and commands)

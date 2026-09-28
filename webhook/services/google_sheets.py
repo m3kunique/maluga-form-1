@@ -37,6 +37,20 @@ def ensure_headers(spreadsheet_id: str, sheet_name: str, headers: list[str]) -> 
     return False
 
 
+def update_headers(spreadsheet_id: str, sheet_name: str, headers: list[str]) -> bool:
+    """Overwrite header row (row 1) with updated column list."""
+    if not spreadsheet_id or not headers:
+        return False
+
+    try:
+        worksheet = get_worksheet(spreadsheet_id, sheet_name)
+        worksheet.update(values=[headers], range_name='A1')
+        return True
+    except Exception as e:
+        print(f"Error updating headers in Google Sheets: {e}", flush=True)
+        return False
+
+
 def append_rows(spreadsheet_id: str, sheet_name: str, rows: list[list[str]]) -> int:
     """Batch append rows to Google Sheets."""
     if not spreadsheet_id or not rows:
