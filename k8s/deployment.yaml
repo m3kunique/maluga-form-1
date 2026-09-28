@@ -16,6 +16,8 @@ spec:
       labels:
         app: maluga-form-service
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         # Web server for receiving webhooks
         - name: web
