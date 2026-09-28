@@ -24,6 +24,8 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: DB_PATH
               value: "/app/data/db.sqlite3"
             - name: ALLOWED_HOSTS
@@ -71,6 +73,8 @@ spec:
           imagePullPolicy: Never
           args: ["python", "manage.py", "run_all"]
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: DB_PATH
               value: "/app/data/db.sqlite3"
             - name: ALLOWED_HOSTS

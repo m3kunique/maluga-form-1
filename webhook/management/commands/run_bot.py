@@ -1,4 +1,5 @@
 import time
+import sys
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 from django.conf import settings
@@ -167,12 +168,15 @@ class Command(BaseCommand):
             if token and token != 'dummy':
                 break
             self.stdout.write(self.style.WARNING("TELEGRAM_BOT_TOKEN is not configured or is set to dummy. Waiting 15s..."))
+            sys.stdout.flush()
             time.sleep(15)
 
         admin_ids = get_admin_chat_ids()
+        masked_token = f"{token[:6]}...{token[-4:]}" if len(token) > 10 else "***"
         self.stdout.write(self.style.SUCCESS(
-            f"Starting Telegram admin bot with buttons for admin ID(s): {', '.join(admin_ids) or 'any'}"
+            f"Telegram bot started! Listening for updates (token={masked_token}, admins={', '.join(admin_ids) or 'any'})"
         ))
+        sys.stdout.flush()
 
         offset = None
         while True:
@@ -183,16 +187,24 @@ class Command(BaseCommand):
 
                     # 1. Handle Inline Button Clicks (callback_query)
                     if 'callback_query' in update:
-                        self.handle_callback(update['callback_query'], admin_ids)
+                        cb = update['callback_query']
+                        self.stdout.write(f"Button callback received: {cb.get('data')} from {cb.get('from', {}).get('id')}")
+                        sys.stdout.flush()
+                        self.handle_callback(cb, admin_ids)
                         continue
 
                     # 2. Handle Text Messages
                     message = update.get('message')
                     if message:
+                        text_preview = message.get('text', '')[:30]
+                        sender = message.get('from', {}).get('id')
+                        self.stdout.write(f"Message received from {sender}: {text_preview}")
+                        sys.stdout.flush()
                         self.handle_message(message, admin_ids)
 
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f"Bot polling error: {e}"))
+                sys.stdout.flush()
                 time.sleep(3)
 
     def handle_callback(self, cb: dict, admin_ids: list[str]):

@@ -177,10 +177,25 @@ def send_telegram_alert(source: str, error: Exception | str, details: dict | Non
     return send_telegram_message(message)
 
 
+def delete_telegram_webhook() -> bool:
+    """Delete any active Telegram webhook so that getUpdates polling works."""
+    token, _, _ = get_telegram_config()
+    if not token or token == 'dummy':
+        return False
+    url = f"https://api.telegram.org/bot{token}/deleteWebhook"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'FormSyncBot/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"deleteWebhook error: {e}", flush=True)
+        return False
+
+
 def get_telegram_updates(offset: int | None = None, timeout: int = 25) -> list[dict]:
     """Long-poll Telegram Bot API for updates."""
     token, _, _ = get_telegram_config()
-    if not token:
+    if not token or token == 'dummy':
         return []
 
     url = f"https://api.telegram.org/bot{token}/getUpdates?timeout={timeout}"
@@ -195,6 +210,10 @@ def get_telegram_updates(offset: int | None = None, timeout: int = 25) -> list[d
                 if data.get('ok'):
                     return data.get('result', [])
     except Exception as e:
-        if 'timed out' not in str(e).lower():
-            print(f"Error fetching Telegram updates: {e}")
+        err_str = str(e).lower()
+        if '409' in err_str or 'conflict' in err_str:
+            print("Telegram webhook conflict detected. Deleting webhook...", flush=True)
+            delete_telegram_webhook()
+        elif 'timed out' not in err_str:
+            print(f"Error fetching Telegram updates: {e}", flush=True)
     return []

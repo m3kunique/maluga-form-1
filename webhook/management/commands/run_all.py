@@ -11,6 +11,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS("Starting combined Worker and Telegram Bot service..."))
+        sys.stdout.flush()
 
         stop_event = threading.Event()
 
