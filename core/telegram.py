@@ -1,8 +1,26 @@
 import json
 import os
+import socket
 import traceback
 import urllib.request
 import urllib.error
+
+# Force IPv4 resolution to prevent [Errno 101] Network is unreachable on IPv4-only networks
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_fallback_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if family == 0 or family == socket.AF_UNSPEC:
+        try:
+            res = _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+            if res:
+                return res
+        except Exception:
+            pass
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_fallback_getaddrinfo
 
 try:
     from django.conf import settings
