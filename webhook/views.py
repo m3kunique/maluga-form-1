@@ -111,12 +111,17 @@ def dynamic_webhook(request, form_slug: str):
                     f"🔔 <b>New Form Detected:</b> <code>{form_slug}</code>\n"
                     f"Discovered {len(detected_columns)} fields:\n"
                     f"<code>{cols_preview}</code>\n\n"
-                    f"Link existing sheet:\n"
-                    f"<code>/bind {form_slug} &lt;spreadsheet_id&gt;</code>\n\n"
-                    f"Or auto-create on Google Drive:\n"
-                    f"<code>/create_sheet {form_slug} &lt;your_email@gmail.com&gt;</code>"
+                    f"Выберите действие с помощью кнопок:"
                 )
-                send_telegram_message(prompt_msg)
+                buttons = {
+                    "inline_keyboard": [
+                        [
+                            {"text": "➕ Создать Google Таблицу", "callback_data": f"create_prompt:{form_slug}"},
+                            {"text": "🔗 Привязать существующую", "callback_data": f"bind_prompt:{form_slug}"},
+                        ]
+                    ]
+                }
+                send_telegram_message(prompt_msg, reply_markup=buttons)
 
         # Parse row values if columns_order is available
         parsed_row = None

@@ -202,39 +202,46 @@ class QueueWorkerTests(TestCase):
         mock_tg_alert.assert_called_once()
 
 
+from webhook.management.commands.run_bot import (
+    build_forms_view,
+    build_stats_view,
+    build_logs_view,
+    USER_STATES,
+)
+
+
 class TelegramBotAdminTests(TestCase):
     def setUp(self):
         self.bot = BotCommand()
+        USER_STATES.clear()
 
-    def test_help_command(self):
-        resp = self.bot.process_command("/help", "123")
-        self.assertIn("Available commands:", resp)
-
-    def test_forms_command(self):
+    def test_build_forms_view_with_forms(self):
         FormConfig.objects.create(slug="event-1", title="Event 1", spreadsheet_id="s1")
-        resp = self.bot.process_command("/forms", "123")
-        self.assertIn("event-1", resp)
-        self.assertIn("s1", resp)
+        text, kb = build_forms_view()
+        self.assertIn("event-1", text)
+        self.assertIn("Event 1", text)
+        self.assertTrue(len(kb["inline_keyboard"]) > 0)
 
-    def test_stats_command(self):
+    def test_build_stats_view(self):
         WebhookSubmission.objects.create(form_slug="s", status="SUCCESS")
         WebhookSubmission.objects.create(form_slug="s", status="PENDING")
-        resp = self.bot.process_command("/stats", "123")
-        self.assertIn("Successfully Written: 1", resp)
-        self.assertIn("Pending in Queue: 1", resp)
+        text, kb = build_stats_view()
+        self.assertIn("Всего поступило заявок", text)
+        self.assertIn("Успешно записано в Google Таблицы: <b>1</b>", text)
 
-    @patch("webhook.services.google_sheets.ensure_headers")
-    def test_bind_command(self, mock_headers):
-        FormConfig.objects.create(slug="f1", columns_order=["a", "b"])
-        resp = self.bot.process_command("/bind f1 new_sheet_id", "123")
-        self.assertIn("linked to sheet", resp)
-        form = FormConfig.objects.get(slug="f1")
-        self.assertEqual(form.spreadsheet_id, "new_sheet_id")
+    @patch("webhook.management.commands.run_bot.send_telegram_message")
+    def test_menu_button_forms(self, mock_send):
+        self.bot.handle_message({"chat": {"id": "123"}, "text": "📋 Формы"}, admin_ids=["123"])
+        mock_send.assert_called_once()
+        self.assertIn("inline_keyboard", mock_send.call_args.kwargs["reply_markup"])
 
-    def test_retry_command(self):
-        WebhookSubmission.objects.create(form_slug="f1", status="FAILED", attempts=5)
-        resp = self.bot.process_command("/retry f1", "123")
-        self.assertIn("Re-queued 1 submissions", resp)
-        sub = WebhookSubmission.objects.first()
-        self.assertEqual(sub.status, "PENDING")
-        self.assertEqual(sub.attempts, 0)
+    @patch("webhook.management.commands.run_bot.answer_callback_query")
+    @patch("webhook.management.commands.run_bot.edit_telegram_message")
+    def test_callback_toggle_form(self, mock_edit, mock_answer):
+        form = FormConfig.objects.create(slug="f1", is_active=True)
+        cb = {"id": "cb1", "from": {"id": "123"}, "data": "toggle:f1", "message": {"message_id": 99}}
+        self.bot.handle_callback(cb, admin_ids=["123"])
+        form.refresh_from_db()
+        self.assertFalse(form.is_active)
+        mock_answer.assert_called_once()
+        mock_edit.assert_called_once()

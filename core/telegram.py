@@ -40,7 +40,12 @@ def get_admin_chat_ids() -> list[str]:
     return [cid.strip() for cid in str(raw).split(',') if cid.strip()]
 
 
-def send_telegram_message(text: str, chat_id: str | None = None, parse_mode: str = 'HTML') -> bool:
+def send_telegram_message(
+    text: str,
+    chat_id: str | None = None,
+    parse_mode: str = 'HTML',
+    reply_markup: dict | None = None,
+) -> bool:
     """Send a message to a specific Telegram chat, or broadcast to all admins if chat_id is None."""
     token, default_chat_id, _ = get_telegram_config()
     if not token:
@@ -56,13 +61,16 @@ def send_telegram_message(text: str, chat_id: str | None = None, parse_mode: str
     success = False
     for target in targets:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = json.dumps({
+        body = {
             'chat_id': str(target),
             'text': text,
             'parse_mode': parse_mode,
             'disable_web_page_preview': True,
-        }).encode('utf-8')
+        }
+        if reply_markup is not None:
+            body['reply_markup'] = reply_markup
 
+        payload = json.dumps(body).encode('utf-8')
         req = urllib.request.Request(
             url,
             data=payload,
@@ -78,6 +86,70 @@ def send_telegram_message(text: str, chat_id: str | None = None, parse_mode: str
             print(f"Failed to send Telegram message to {target}: {e}")
 
     return success
+
+
+def answer_callback_query(callback_query_id: str, text: str = "") -> bool:
+    """Acknowledge Telegram callback query to dismiss loading state on button."""
+    token, _, _ = get_telegram_config()
+    if not token:
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    payload = json.dumps({
+        'callback_query_id': str(callback_query_id),
+        'text': text,
+    }).encode('utf-8')
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"Failed to answer callback query: {e}")
+        return False
+
+
+def edit_telegram_message(
+    chat_id: str,
+    message_id: int,
+    text: str,
+    parse_mode: str = 'HTML',
+    reply_markup: dict | None = None,
+) -> bool:
+    """Edit existing Telegram message text and inline keyboard."""
+    token, _, _ = get_telegram_config()
+    if not token:
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/editMessageText"
+    body = {
+        'chat_id': str(chat_id),
+        'message_id': message_id,
+        'text': text,
+        'parse_mode': parse_mode,
+        'disable_web_page_preview': True,
+    }
+    if reply_markup is not None:
+        body['reply_markup'] = reply_markup
+
+    payload = json.dumps(body).encode('utf-8')
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"Failed to edit message: {e}")
+        return False
 
 
 def send_telegram_alert(source: str, error: Exception | str, details: dict | None = None) -> bool:
