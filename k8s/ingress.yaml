@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: django-yandex-webhook-ingress
+  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  rules:
+  - host: test-maluga-api.m3k.su
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: maluga-form-service
+            port:
+              number: 8000
+  tls:
+  - hosts:
+    - test-maluga-api.m3k.su
