@@ -304,6 +304,23 @@ class Command(BaseCommand):
         chat_id = str(message.get('chat', {}).get('id', ''))
         text = (message.get('text') or '').strip()
 
+        # Secret whoami command to identify chat ID before authorization
+        cmd_part = text.split()[0].split('@')[0] if text else ''
+        if cmd_part == '/whoami-b3NkY24!2':
+            user = message.get('from', {})
+            username = user.get('username')
+            first_name = user.get('first_name', '')
+            user_info = f"@{username}" if username else (first_name or "Не указано")
+
+            reply = (
+                f"👤 <b>Ваш Telegram Chat ID:</b> <code>{chat_id}</code>\n"
+                f"<b>Пользователь:</b> {user_info}\n\n"
+                f"Добавьте этот ID в <code>TELEGRAM_ADMIN_CHAT_ID</code>:\n"
+                f"<code>TELEGRAM_ADMIN_CHAT_ID={chat_id}</code>"
+            )
+            send_telegram_message(reply, chat_id=chat_id)
+            return
+
         if admin_ids and chat_id not in admin_ids:
             send_telegram_message("Доступ запрещен.", chat_id=chat_id)
             return

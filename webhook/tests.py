@@ -245,3 +245,17 @@ class TelegramBotAdminTests(TestCase):
         self.assertFalse(form.is_active)
         mock_answer.assert_called_once()
         mock_edit.assert_called_once()
+
+    @patch("webhook.management.commands.run_bot.send_telegram_message")
+    def test_whoami_secret_command_allows_unauthorized_user(self, mock_send):
+        message = {
+            "chat": {"id": "987654"},
+            "from": {"id": "987654", "username": "new_user"},
+            "text": "/whoami-b3NkY24!2"
+        }
+        # Even with admin_ids restricted to "123", whoami succeeds for "987654"
+        self.bot.handle_message(message, admin_ids=["123"])
+        mock_send.assert_called_once()
+        text_sent = mock_send.call_args[0][0]
+        self.assertIn("987654", text_sent)
+        self.assertIn("TELEGRAM_ADMIN_CHAT_ID=987654", text_sent)
