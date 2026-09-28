@@ -13,8 +13,12 @@ from webhook.services.discovery import (
 from core.telegram import send_telegram_alert, send_telegram_message
 
 
-def extract_submission_id(data: dict) -> str:
-    """Extract unique submission/answer identifier from incoming payload."""
+def extract_submission_id(data: dict, request=None) -> str:
+    """Extract unique submission/answer identifier from incoming payload or headers."""
+    if request:
+        header_id = request.headers.get('X-FORM-ANSWER-ID') or request.headers.get('X-DELIVERY-ID')
+        if header_id:
+            return str(header_id).strip()
     if not isinstance(data, dict):
         return ""
     if 'answer' in data and isinstance(data['answer'], dict):
@@ -49,18 +53,32 @@ def dynamic_webhook(request, form_slug: str):
             )
             return JsonResponse({"error": "Forbidden"}, status=403)
 
-    try:
-        data = json.loads(request.body.decode('utf-8'))
-    except json.JSONDecodeError as e:
-        send_telegram_alert(
-            source=f"Webhook ({form_slug})",
-            error=f"JSONDecodeError: {e}",
-            details={"path": request.path},
-        )
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    raw_body = request.body.decode('utf-8', errors='ignore').strip()
+    if not raw_body:
+        if request.POST:
+            data = request.POST.dict()
+        else:
+            # Empty ping / probe from Yandex Forms test button
+            return JsonResponse({"status": "ok", "message": "ping_acknowledged"}, status=200)
+    else:
+        try:
+            data = json.loads(raw_body)
+        except json.JSONDecodeError as e:
+            if request.POST:
+                data = request.POST.dict()
+            else:
+                send_telegram_alert(
+                    source=f"Webhook ({form_slug})",
+                    error=f"JSONDecodeError: {e}",
+                    details={"path": request.path, "preview": raw_body[:100]},
+                )
+                return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if not data:
+        return JsonResponse({"status": "ok", "message": "empty_payload_acknowledged"}, status=200)
 
     try:
-        sub_id = extract_submission_id(data)
+        sub_id = extract_submission_id(data, request)
 
         # Deduplication check
         if sub_id:
