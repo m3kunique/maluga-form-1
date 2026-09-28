@@ -102,10 +102,30 @@ spec:
             - name: data-volume
               mountPath: /app/data
 
+        # AmneziaWG sidecar tunnel for routing Telegram traffic
+        - name: awg-client
+          image: ghcr.io/zeozeozeo/amneziawg-client:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: awg-config
+              mountPath: /config
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+
       volumes:
         - name: data-volume
           persistentVolumeClaim:
             claimName: maluga-forms-data-pvc
+        - name: awg-config
+          secret:
+            secretName: awg-config
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
 ---
 apiVersion: v1
 kind: Service
