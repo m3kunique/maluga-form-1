@@ -55,7 +55,14 @@ def get_admin_chat_ids() -> list[str]:
     raw = admin_chat_id or chat_id
     if not raw:
         return []
-    return [cid.strip() for cid in str(raw).split(',') if cid.strip()]
+    ids = []
+    for cid in str(raw).split(','):
+        cid = cid.strip().strip('"').strip("'")
+        if '=' in cid:
+            cid = cid.split('=')[-1].strip().strip('"').strip("'")
+        if cid:
+            ids.append(cid)
+    return ids
 
 
 def send_telegram_message(
