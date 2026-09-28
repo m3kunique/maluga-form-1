@@ -26,8 +26,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-w+uwm)qyq3b6m#ll((u^abdu!k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
-extra_hosts = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()]
-ALLOWED_HOSTS = list(set(['test-maluga-api.m3k.su', '127.0.0.1', 'localhost'] + extra_hosts))
+raw_hosts = os.getenv('ALLOWED_HOSTS', '*')
+if raw_hosts.strip() == '*':
+    ALLOWED_HOSTS = ['*']
+else:
+    extra_hosts = [h.strip() for h in raw_hosts.split(',') if h.strip()]
+    ALLOWED_HOSTS = list(set(['test-maluga-api.m3k.su', '127.0.0.1', 'localhost'] + extra_hosts))
 
 
 # Application definition

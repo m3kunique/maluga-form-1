@@ -158,15 +158,16 @@ def build_help_view() -> str:
         "кнопки для создания или привязки таблицы."
     )
 
-
 class Command(BaseCommand):
     help = "Run Telegram admin bot daemon with interactive buttons and long-polling"
 
     def handle(self, *args, **options):
-        token, default_chat, admin_chat = get_telegram_config()
-        if not token:
-            self.stdout.write(self.style.ERROR("TELEGRAM_BOT_TOKEN is not configured."))
-            return
+        while True:
+            token, default_chat, admin_chat = get_telegram_config()
+            if token and token != 'dummy':
+                break
+            self.stdout.write(self.style.WARNING("TELEGRAM_BOT_TOKEN is not configured or is set to dummy. Waiting 15s..."))
+            time.sleep(15)
 
         admin_ids = get_admin_chat_ids()
         self.stdout.write(self.style.SUCCESS(

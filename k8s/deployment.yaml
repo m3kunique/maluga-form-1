@@ -27,7 +27,7 @@ spec:
             - name: DB_PATH
               value: "/app/data/db.sqlite3"
             - name: ALLOWED_HOSTS
-              value: "test-maluga-api.m3k.su,localhost,127.0.0.1"
+              value: "*"
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -50,12 +50,18 @@ spec:
             httpGet:
               path: /healthz/
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 10
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /healthz/
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
             initialDelaySeconds: 5
             periodSeconds: 10
 
@@ -63,10 +69,12 @@ spec:
         - name: worker
           image: test-maluga-form-web:latest
           imagePullPolicy: Never
-          command: ["python", "manage.py", "run_all"]
+          args: ["python", "manage.py", "run_all"]
           env:
             - name: DB_PATH
               value: "/app/data/db.sqlite3"
+            - name: ALLOWED_HOSTS
+              value: "*"
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
